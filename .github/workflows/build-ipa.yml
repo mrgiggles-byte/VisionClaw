@@ -17,7 +17,7 @@ jobs:
       - name: Resolve Package Dependencies
         run: cd samples/CameraAccess && xcodebuild -resolvePackageDependencies -project CameraAccess.xcodeproj -scheme CameraAccess
 
-      - name: Build App (ad-hoc)
+      - name: Build App (unsigned)
         run: |
           set -o pipefail
           cd samples/CameraAccess
@@ -27,12 +27,10 @@ jobs:
             -sdk iphoneos \
             -arch arm64 \
             -configuration Release \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=YES \
-            CODE_SIGN_STYLE=Manual \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
             ONLY_ACTIVE_ARCH=NO \
             CONFIGURATION_BUILD_DIR=$(pwd)/build/Release-iphoneos \
             2>&1 | tee /tmp/build.log
@@ -44,12 +42,13 @@ jobs:
           APP=$(find samples/CameraAccess/build/Release-iphoneos -name "*.app" -maxdepth 1 | head -1)
           [ -z "$APP" ] && { echo "ERROR: No .app found"; tail -60 /tmp/build.log; exit 1; }
           [ ! -f "$APP/CameraAccess" ] && { echo "ERROR: Binary missing"; ls -la "$APP/"; grep -E "error:" /tmp/build.log | tail -20; exit 1; }
-          echo "Binary found"
-          codesign -dv "$APP" 2>&1 || true
+          echo "Binary found at $APP"
 
-      - name: Package IPA
+      - name: Sign and Package IPA
         run: |
           APP=$(find samples/CameraAccess/build/Release-iphoneos -name "*.app" -maxdepth 1 | head -1)
+          echo "Signing ad-hoc: $APP"
+          codesign -s - --deep --force "$APP"
           mkdir -p /tmp/Payload
           cp -r "$APP" /tmp/Payload/
           cd /tmp && zip -r VisionClaw.ipa Payload/
