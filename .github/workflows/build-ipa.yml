@@ -17,33 +17,37 @@ jobs:
         run: |
           cp samples/CameraAccess/CameraAccess/Secrets.swift.example samples/CameraAccess/CameraAccess/Secrets.swift
 
-      - name: Build Archive
+      - name: Build App
         run: |
           cd samples/CameraAccess
-          xcodebuild archive \
+          xcodebuild build \
             -project CameraAccess.xcodeproj \
             -scheme CameraAccess \
-            -destination 'generic/platform=iOS' \
-            -archivePath build/VisionClaw.xcarchive \
+            -sdk iphoneos \
+            -configuration Release \
+            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" \
-            | xcpretty || true
+            CONFIGURATION_BUILD_DIR=$(pwd)/build/Release-iphoneos 2>&1 | xcpretty || true
 
       - name: Package IPA
         run: |
-          ARCHIVE=samples/CameraAccess/build/VisionClaw.xcarchive
-          APP=$(find "$ARCHIVE/Products/Applications" -name '*.app' | head -1)
+          APP=$(find samples/CameraAccess/build/Release-iphoneos -name *.app -maxdepth 1 | head -1)
+          if [ -z "$APP" ]; then
+            echo "ERROR: No .app found"
+            find samples/CameraAccess/build -type d | head -30
+            exit 1
+          fi
           mkdir -p /tmp/Payload
           cp -r "$APP" /tmp/Payload/
-          cd /tmp && zip -r VisionClaw.ipa Payload
-          mv /tmp/VisionClaw.ipa samples/CameraAccess/build/VisionClaw.ipa
+          cd /tmp && zip -r VisionClaw.ipa Payload/
+          mv /tmp/VisionClaw.ipa $GITHUB_WORKSPACE/VisionClaw.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: VisionClaw-IPA
-          path: samples/CameraAccess/build/VisionClaw.ipa
+          path: VisionClaw.ipa
           retention-days: 7
           if-no-files-found: error
