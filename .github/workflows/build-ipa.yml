@@ -1,0 +1,49 @@
+name: Build VisionClaw IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Create Secrets.swift
+        run: |
+          cp samples/CameraAccess/CameraAccess/Secrets.swift.example samples/CameraAccess/CameraAccess/Secrets.swift
+
+      - name: Build Archive
+        run: |
+          cd samples/CameraAccess
+          xcodebuild archive \
+            -project CameraAccess.xcodeproj \
+            -scheme CameraAccess \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/VisionClaw.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            | xcpretty || true
+
+      - name: Package IPA
+        run: |
+          ARCHIVE=samples/CameraAccess/build/VisionClaw.xcarchive
+          APP=$(find "$ARCHIVE/Products/Applications" -name '*.app' | head -1)
+          mkdir -p /tmp/Payload
+          cp -r "$APP" /tmp/Payload/
+          cd /tmp && zip -r VisionClaw.ipa Payload
+          mv /tmp/VisionClaw.ipa samples/CameraAccess/build/VisionClaw.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: VisionClaw-IPA
+          path: samples/CameraAccess/build/VisionClaw.ipa
+          retention-days: 7
+          if-no-files-found: error
