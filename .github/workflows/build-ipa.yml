@@ -15,9 +15,22 @@ jobs:
         run: cd samples/CameraAccess && xcodebuild -resolvePackageDependencies -project CameraAccess.xcodeproj -scheme CameraAccess
       - name: Build App
         run: |
+          set -o pipefail
           cd samples/CameraAccess
-          xcodebuild build -project CameraAccess.xcodeproj -scheme CameraAccess -sdk iphoneos -arch arm64 -configuration Release CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM="" ONLY_ACTIVE_ARCH=NO CONFIGURATION_BUILD_DIR=$(pwd)/build/Release-iphoneos 2>&1 | tee /tmp/build.log || { echo "=== BUILD ERRORS ==="; grep -E "error:|BUILD FAILED" /tmp/build.log | head -50; exit 1; }
-          find $(pwd)/build -type f | head -50
+          xcodebuild build \
+            -project CameraAccess.xcodeproj \
+            -scheme CameraAccess \
+            -sdk iphoneos \
+            -arch arm64 \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO \
+            CONFIGURATION_BUILD_DIR=$(pwd)/build/Release-iphoneos \
+            2>&1 | tee /tmp/build.log
+          echo "=== BUILD FILES ==="
+          find $(pwd)/build -type f | head -60
       - name: Package IPA
         run: |
           APP=$(find samples/CameraAccess/build/Release-iphoneos -name "*.app" -maxdepth 1 | head -1)
