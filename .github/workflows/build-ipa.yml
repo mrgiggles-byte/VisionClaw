@@ -11,6 +11,21 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode.app && xcodebuild -version
       - name: Create Secrets.swift
         run: cp samples/CameraAccess/CameraAccess/Secrets.swift.example samples/CameraAccess/CameraAccess/Secrets.swift
+      - name: Create Signing Cert
+        run: |
+          security create-keychain -p "" build.keychain
+          security set-keychain-settings build.keychain
+          security unlock-keychain -p "" build.keychain
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+          openssl req -x509 -newkey rsa:2048 -keyout /tmp/cert.key -out /tmp/cert.crt -days 1 -nodes \
+            -subj "/CN=iPhone Developer" \
+            -extensions v3_req \
+            -addext "extendedKeyUsage=codeSigning"
+          openssl pkcs12 -export -out /tmp/cert.p12 -inkey /tmp/cert.key -in /tmp/cert.crt -passout pass:
+          security import /tmp/cert.p12 -k build.keychain -P "" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          CERT_NAME=$(security find-identity -p codesigning -v build.keychain | head -1 | awk -F '"' '{print $2}')
+          echo "CERT_NAME=$CERT_NAME" >> $GITHUB_ENV
       - name: Resolve Package Dependencies
         run: cd samples/CameraAccess && xcodebuild -resolvePackageDependencies -project CameraAccess.xcodeproj -scheme CameraAccess
       - name: Build App
@@ -23,10 +38,11 @@ jobs:
             -sdk iphoneos \
             -arch arm64 \
             -configuration Release \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="$CERT_NAME" \
+            CODE_SIGNING_REQUIRED=YES \
             DEVELOPMENT_TEAM="" \
             ONLY_ACTIVE_ARCH=NO \
+            OTHER_CODE_SIGN_FLAGS="--keychain build.keychain" \
             CONFIGURATION_BUILD_DIR=$(pwd)/build/Release-iphoneos \
             2>&1 | tee /tmp/build.log
           echo "=== BUILD FILES ==="
