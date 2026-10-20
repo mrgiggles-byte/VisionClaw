@@ -8,28 +8,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
+        run: sudo xcode-select -s /Applications/Xcode.app && xcodebuild -version
       - name: Create Secrets.swift
-        run: |
-          cp samples/CameraAccess/CameraAccess/Secrets.swift.example samples/CameraAccess/CameraAccess/Secrets.swift
+        run: cp samples/CameraAccess/CameraAccess/Secrets.swift.example samples/CameraAccess/CameraAccess/Secrets.swift
       - name: Resolve Package Dependencies
-        run: |
-          cd samples/CameraAccess
-          xcodebuild -resolvePackageDependencies -project CameraAccess.xcodeproj -scheme CameraAccess
+        run: cd samples/CameraAccess && xcodebuild -resolvePackageDependencies -project CameraAccess.xcodeproj -scheme CameraAccess
       - name: Build App
         run: |
+          set -eo pipefail
           cd samples/CameraAccess
-          set -o pipefail
-          xcodebuild build -project CameraAccess.xcodeproj -scheme CameraAccess -sdk iphoneos -destination generic/platform=iOS -configuration Release ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY= CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$(pwd)/build/Release-iphoneos
-          find $(pwd)/build -type f | head -50
+          xcodebuild build -project CameraAccess.xcodeproj -scheme CameraAccess -sdk iphoneos -arch arm64 -configuration Release CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM="" ONLY_ACTIVE_ARCH=NO CONFIGURATION_BUILD_DIR=$(pwd)/build/Release-iphoneos
+          echo build done
+          find $(pwd)/build -type f | head -60
       - name: Package IPA
         run: |
           APP=$(find samples/CameraAccess/build/Release-iphoneos -name "*.app" -maxdepth 1 | head -1)
-          if [ -z "$APP" ]; then echo ERROR No app found; exit 1; fi
-          ls -la "$APP/"
-          if [ ! -f "$APP/CameraAccess" ]; then echo ERROR Binary missing; exit 1; fi
-          mkdir -p /tmp/Payload
-          cp -r "$APP" /tmp/Payload/
+          [ -z "$APP" ] && { echo ERROR No app found; exit 1; }
+          [ ! -f "$APP/CameraAccess" ] && { echo ERROR Binary missing; ls -la "$APP/"; exit 1; }
+          mkdir -p /tmp/Payload && cp -r "$APP" /tmp/Payload/
           cd /tmp && zip -r VisionClaw.ipa Payload/
           mv /tmp/VisionClaw.ipa $GITHUB_WORKSPACE/VisionClaw.ipa
       - name: Upload IPA
