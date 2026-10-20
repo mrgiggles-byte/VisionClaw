@@ -21,8 +21,8 @@ jobs:
             -subj "/CN=iPhone Developer" \
             -extensions v3_req \
             -addext "extendedKeyUsage=codeSigning"
-          openssl pkcs12 -export -out /tmp/cert.p12 -inkey /tmp/cert.key -in /tmp/cert.crt -passout pass:
-          security import /tmp/cert.p12 -k build.keychain -P "" -T /usr/bin/codesign
+          openssl pkcs12 -export -legacy -out /tmp/cert.p12 -inkey /tmp/cert.key -in /tmp/cert.crt -passout pass:temp1234
+          security import /tmp/cert.p12 -k build.keychain -P "temp1234" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
           CERT_NAME=$(security find-identity -p codesigning -v build.keychain | head -1 | awk -F '"' '{print $2}')
           echo "CERT_NAME=$CERT_NAME" >> $GITHUB_ENV
