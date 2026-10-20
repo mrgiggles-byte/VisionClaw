@@ -7,28 +7,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app && xcodebuild -version
+
       - name: Create Secrets.swift
         run: cp samples/CameraAccess/CameraAccess/Secrets.swift.example samples/CameraAccess/CameraAccess/Secrets.swift
-      - name: Create Signing Cert
-        run: |
-          security create-keychain -p "" build.keychain
-          security set-keychain-settings build.keychain
-          security unlock-keychain -p "" build.keychain
-          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
-          openssl req -x509 -newkey rsa:2048 -keyout /tmp/cert.key -out /tmp/cert.crt -days 1 -nodes \
-            -subj "/CN=iPhone Developer" \
-            -extensions v3_req \
-            -addext "extendedKeyUsage=codeSigning"
-          openssl pkcs12 -export -legacy -out /tmp/cert.p12 -inkey /tmp/cert.key -in /tmp/cert.crt -passout pass:temp1234
-          security import /tmp/cert.p12 -k build.keychain -P "temp1234" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
-          CERT_NAME=$(security find-identity -p codesigning -v build.keychain | head -1 | awk -F '"' '{print $2}')
-          echo "CERT_NAME=$CERT_NAME" >> $GITHUB_ENV
+
       - name: Resolve Package Dependencies
         run: cd samples/CameraAccess && xcodebuild -resolvePackageDependencies -project CameraAccess.xcodeproj -scheme CameraAccess
-      - name: Build App
+
+      - name: Build App (ad-hoc)
         run: |
           set -o pipefail
           cd samples/CameraAccess
@@ -38,23 +27,35 @@ jobs:
             -sdk iphoneos \
             -arch arm64 \
             -configuration Release \
-            CODE_SIGN_IDENTITY="$CERT_NAME" \
+            CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             ONLY_ACTIVE_ARCH=NO \
-            OTHER_CODE_SIGN_FLAGS="--keychain build.keychain" \
             CONFIGURATION_BUILD_DIR=$(pwd)/build/Release-iphoneos \
             2>&1 | tee /tmp/build.log
           echo "=== BUILD FILES ==="
           find $(pwd)/build -type f | head -60
+
+      - name: Verify Binary
+        run: |
+          APP=$(find samples/CameraAccess/build/Release-iphoneos -name "*.app" -maxdepth 1 | head -1)
+          [ -z "$APP" ] && { echo "ERROR: No .app found"; tail -60 /tmp/build.log; exit 1; }
+          [ ! -f "$APP/CameraAccess" ] && { echo "ERROR: Binary missing"; ls -la "$APP/"; grep -E "error:" /tmp/build.log | tail -20; exit 1; }
+          echo "Binary found"
+          codesign -dv "$APP" 2>&1 || true
+
       - name: Package IPA
         run: |
           APP=$(find samples/CameraAccess/build/Release-iphoneos -name "*.app" -maxdepth 1 | head -1)
-          [ -z "$APP" ] && { echo ERROR No app found; exit 1; }
-          [ ! -f "$APP/CameraAccess" ] && { echo ERROR Binary missing; ls -la "$APP/"; exit 1; }
-          mkdir -p /tmp/Payload && cp -r "$APP" /tmp/Payload/
+          mkdir -p /tmp/Payload
+          cp -r "$APP" /tmp/Payload/
           cd /tmp && zip -r VisionClaw.ipa Payload/
           mv /tmp/VisionClaw.ipa $GITHUB_WORKSPACE/VisionClaw.ipa
+          echo "IPA size: $(ls -lh $GITHUB_WORKSPACE/VisionClaw.ipa)"
+
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
