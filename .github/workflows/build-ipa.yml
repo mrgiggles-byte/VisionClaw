@@ -1,49 +1,37 @@
 name: Build VisionClaw IPA
-
 on:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
-
       - name: Create Secrets.swift
         run: |
           cp samples/CameraAccess/CameraAccess/Secrets.swift.example samples/CameraAccess/CameraAccess/Secrets.swift
-
+      - name: Resolve Package Dependencies
+        run: |
+          cd samples/CameraAccess
+          xcodebuild -resolvePackageDependencies -project CameraAccess.xcodeproj -scheme CameraAccess
       - name: Build App
         run: |
           cd samples/CameraAccess
-          xcodebuild build \
-            -project CameraAccess.xcodeproj \
-            -scheme CameraAccess \
-            -sdk iphoneos \
-            -configuration Release \
-            ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CONFIGURATION_BUILD_DIR=$(pwd)/build/Release-iphoneos 2>&1 | xcpretty || true
-
+          set -o pipefail
+          xcodebuild build -project CameraAccess.xcodeproj -scheme CameraAccess -sdk iphoneos -destination generic/platform=iOS -configuration Release ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY= CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$(pwd)/build/Release-iphoneos
+          find $(pwd)/build -type f | head -50
       - name: Package IPA
         run: |
-          APP=$(find samples/CameraAccess/build/Release-iphoneos -name *.app -maxdepth 1 | head -1)
-          if [ -z "$APP" ]; then
-            echo "ERROR: No .app found"
-            find samples/CameraAccess/build -type d | head -30
-            exit 1
-          fi
+          APP=$(find samples/CameraAccess/build/Release-iphoneos -name "*.app" -maxdepth 1 | head -1)
+          if [ -z "$APP" ]; then echo ERROR No app found; exit 1; fi
+          ls -la "$APP/"
+          if [ ! -f "$APP/CameraAccess" ]; then echo ERROR Binary missing; exit 1; fi
           mkdir -p /tmp/Payload
           cp -r "$APP" /tmp/Payload/
           cd /tmp && zip -r VisionClaw.ipa Payload/
           mv /tmp/VisionClaw.ipa $GITHUB_WORKSPACE/VisionClaw.ipa
-
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
