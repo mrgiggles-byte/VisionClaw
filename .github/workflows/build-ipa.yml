@@ -35,7 +35,7 @@ jobs:
             CONFIGURATION_BUILD_DIR=$(pwd)/build/Release-iphoneos \
             2>&1 | tee /tmp/build.log
           echo "=== BUILD FILES ==="
-          find $(pwd)/build -type f | head -60
+          find $(pwd)/build -type f | head -60 || true
 
       - name: Verify Binary
         run: |
